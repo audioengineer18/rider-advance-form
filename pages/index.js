@@ -18,32 +18,54 @@ export default function Home() {
 
         <pre id="out" style={{ marginTop: 16, background: "#fff", padding: 16, borderRadius: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)", whiteSpace: "pre-wrap" }}></pre>
 
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              const btn = document.getElementById('btn');
-              const out = document.getElementById('out');
-              const fileInput = document.getElementById('fileInput');
-              btn.addEventListener('click', async () => {
-                out.textContent = '';
-                const f = fileInput.files[0];
-                const fd = new FormData();
-                if (f) {
-                  const safeName = f.name ? f.name.replace(/[^\w.\\- ]+/g, "_") : "upload.pdf";
-                  fd.append('file', f, safeName);
-                }
-                try {
-                  const res = await fetch('/api/extract', { method: 'POST', body: fd });
-                  const raw = await res.text();
-                  out.textContent = JSON.stringify({ status: res.status, statusText: res.statusText, raw }, null, 2);
-                } catch (e) {
-                  out.textContent = 'Client error: ' + (e?.message || e);
-                }
-              });
-            `
-          }}
-        />
-      </div>
-    </main>
-  );
-}
+       <script
+  dangerouslySetInnerHTML={{
+    __html: `
+      const btn = document.getElementById('btn');
+      const out = document.getElementById('out');
+      const fileInput = document.getElementById('fileInput');
+
+      const log = (obj) => out.textContent = JSON.stringify(obj, null, 2);
+
+      btn.addEventListener('click', async () => {
+        out.textContent = '';
+        const f = fileInput.files[0];
+        if (!f) return log({ error: "Choose a PDF first." });
+
+        try {
+          const safeName = (f.name || "upload.pdf").replace(/[^\\w.\\- ]+/g, "_");
+          const ct = f.type || "application/pdf";
+
+          // 1) Ask server for a one-time upload URL
+          const urlMaker = new URL('/api/blob-url', window.location.origin);
+          urlMaker.searchParams.set('filename', safeName);
+          urlMaker.searchParams.set('contentType', ct);
+
+          const pre = await fetch(urlMaker.toString(), { method: 'POST' });
+          const preJson = await pre.json();
+          if (!pre.ok || !preJson?.ok) return log({ step: "createUploadUrl", error: preJson?.error || pre.statusText });
+
+          // 2) Upload directly to Blob (bypasses function size limits)
+          const up = await fetch(preJson.uploadUrl, {
+            method: 'POST',
+            headers: { 'content-type': ct },
+            body: f
+          });
+          if (!up.ok) return log({ step: "blob upload", status: up.status, text: await up.text() });
+          const blobInfo = await up.json(); // { url, ... }
+
+          // 3) Ask server to fetch blob and parse
+          const ex = await fetch('/api/extract-from-url', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url: blobInfo.url, name: safeName })
+          });
+          const exJson = await ex.json();
+          return log({ status: ex.status, ...exJson });
+        } catch (e) {
+          return log({ clientError: e?.message || String(e) });
+        }
+      });
+    `
+  }}
+/>
