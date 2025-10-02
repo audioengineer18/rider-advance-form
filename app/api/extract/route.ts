@@ -1,11 +1,11 @@
+// app/api/extract/route.ts
 import { NextResponse } from "next/server";
 
-// Force Node runtime (more forgiving for multipart/form-data)
+// Use Node runtime (handles multipart/form-data reliably)
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    // You can comment these lines back in once you confirm the round-trip works.
     const form = await req.formData();
     const file = form.get("file");
 
@@ -16,14 +16,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // (Optional) Just show that we received the file without actually parsing it yet
-    const bytes = await file.arrayBuffer();
-    const size = (bytes as ArrayBuffer).byteLength;
+    // We’re not parsing yet—just proving round-trip works.
+    const buf = await file.arrayBuffer();
+    const size = buf.byteLength;
 
-    // Return the stubbed extraction so the UI shows results
     return NextResponse.json({
       ok: true,
       received: { name: file.name, size },
+
+      // --- Stubbed extraction so the UI shows a nice result ---
       artist: "Colton Dixon",
       contacts: [
         { role: "Management", name: "Jennifer Fleming", email: "jennifer@qmanagementgroup.com", phone: "615-599-8884" },
