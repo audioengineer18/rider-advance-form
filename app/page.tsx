@@ -13,15 +13,28 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
+
     try {
       const fd = new FormData();
       fd.append("file", file);
+
+      // Call our stub API
       const res = await fetch("/api/extract", { method: "POST", body: fd });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to parse");
-      setResult(json);
+      const raw = await res.text(); // show EXACT response
+
+      setResult({ status: res.status, statusText: res.statusText, raw });
+
+      // If server sent JSON with ok:false, surface it as error
+      try {
+        const json = JSON.parse(raw);
+        if (!res.ok || json.ok === false) {
+          setError(json.error || `HTTP ${res.status} ${res.statusText}`);
+        }
+      } catch {
+        // non-JSON; we already show raw
+      }
     } catch (err: any) {
-      setError(err.message || "Unknown error");
+      setError(err?.message || String(err));
     } finally {
       setLoading(false);
     }
@@ -31,10 +44,8 @@ export default function Home() {
     <main className="min-h-screen p-6">
       <div className="max-w-3xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold">Rider → Advance Form (Test)</h1>
-        <form
-          onSubmit={onSubmit}
-          className="bg-white rounded-xl p-4 shadow space-y-4"
-        >
+
+        <form onSubmit={onSubmit} className="bg-white rounded-xl p-4 shadow space-y-4">
           <input
             type="file"
             accept="application/pdf"
@@ -55,9 +66,10 @@ export default function Home() {
             {error}
           </div>
         )}
+
         {result && (
           <div className="bg-white rounded-xl p-4 shadow">
-            <h2 className="text-xl font-semibold mb-2">Parsed Result</h2>
+            <h2 className="text-xl font-semibold mb-2">Server Response</h2>
             <pre className="text-sm whitespace-pre-wrap">
               {JSON.stringify(result, null, 2)}
             </pre>
